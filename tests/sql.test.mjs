@@ -1,0 +1,24 @@
+import {PGlite} from '@electric-sql/pglite';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; GRANT USAGE ON SCHEMA public,auth TO anon,authenticated,service_role; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated; INSERT INTO auth.users VALUES ('63d8e063-4755-430c-a582-d25d24416dfa');`);
+const dir=new URL('../supabase/',import.meta.url).pathname;
+await db.exec(fs.readFileSync(dir+'schema.sql','utf8'));
+await db.exec(fs.readFileSync(dir+'notifications.sql','utf8'));
+await db.exec(`GRANT SELECT ON public.pd_agenda TO service_role;`); // Supabase's pre-existing default grant
+await db.exec(`SET ROLE authenticated;SELECT set_config('request.jwt.claim.sub','63d8e063-4755-430c-a582-d25d24416dfa',false);`);
+const sub=(await db.query(`INSERT INTO public.pd_push_subscriptions(endpoint,p256dh,auth) VALUES ('https://web.push.apple.com/test',repeat('a',87),repeat('a',22)) RETURNING id`)).rows[0].id;
+const a=(await db.query(`INSERT INTO public.pd_agenda(cliente,veiculo,descricao_servico,inicio,fim) VALUES ('Test','Test','Test',now()+interval '30 minutes',now()+interval '60 minutes') RETURNING id,inicio`)).rows[0];
+await assert.rejects(()=>db.query(`SELECT public.pd_claim_reminder($1,$2,$3,gen_random_uuid())`,[a.id,a.inicio,sub]));
+await db.exec(`SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);`);
+assert.equal((await db.query('SELECT * FROM public.pd_push_subscriptions')).rows.length,0);
+await assert.rejects(()=>db.query(`INSERT INTO public.pd_push_subscriptions(endpoint,p256dh,auth,user_id) VALUES ('https://web.push.apple.com/evil',repeat('a',87),repeat('a',22),'63d8e063-4755-430c-a582-d25d24416dfa')`));
+await db.exec('RESET ROLE;SET ROLE anon;');await assert.rejects(()=>db.query('SELECT * FROM public.pd_push_subscriptions'));
+await db.exec('RESET ROLE;SET ROLE service_role;');
+const claim=()=>db.query(`SELECT public.pd_claim_reminder($1,$2,$3,gen_random_uuid()) AS claimed`,[a.id,a.inicio,sub]);
+assert.equal((await claim()).rows[0].claimed,true);assert.equal((await claim()).rows[0].claimed,false);
+await db.exec(`UPDATE public.pd_push_deliveries SET retry_after=now()-interval '1 minute';`);assert.equal((await claim()).rows[0].claimed,true);
+await db.exec(`UPDATE public.pd_push_deliveries SET sent_at=now(),retry_after=now()-interval '1 minute';`);assert.equal((await claim()).rows[0].claimed,false);
+console.log('PASS: PostgreSQL migrations, owner RLS, other user/anonymous denial, RPC restricted to server, claim/dedup/retry/sent behavior.');
+await db.close();

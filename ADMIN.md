@@ -1,6 +1,6 @@
 # Prime Detail — painel privado
 
-Painel em `/admin/`, compatível com hospedagem estática da Netlify. Não altera o `index.html`, o catálogo público ou seus preços. O catálogo do painel é interno e começa vazio; alterações nele não são publicadas automaticamente na vitrine.
+Painel em `/admin/` na Netlify, com funções de servidor para avisos agendados. Não altera o `index.html`, o catálogo público ou seus preços. O catálogo do painel é interno e começa vazio; alterações nele não são publicadas automaticamente na vitrine.
 
 ## Publicar e usar
 
@@ -8,7 +8,7 @@ Painel em `/admin/`, compatível com hospedagem estática da Netlify. Não alter
 2. Aguardar o deploy e acessar `https://SEU-DOMINIO/admin/`.
 3. Entrar com o e-mail e a senha da conta criada em Supabase Authentication.
 4. Cadastrar serviços, depois atendimentos e materiais. Os preços e descrições dos atendimentos são cópias do combinado e não mudam quando o serviço é editado.
-5. No Safari do iPhone, abrir `/admin/`, Compartilhar → Adicionar à Tela de Início. O painel requer internet; não há suporte offline ou notificações push nesta versão.
+5. No Safari do iPhone, abrir `/admin/`, Compartilhar → Adicionar à Tela de Início. O painel requer internet; não há suporte offline. Para os avisos automáticos de 30 minutos, seguir NOTIFICACOES.md.
 
 Não há link administrativo no menu público. A tela de login e o código são públicos; os registros são protegidos no Supabase por RLS. A chave `sb_publishable_...` pode estar no frontend. Nunca adicionar `service_role`, secret keys, senhas ou tokens de sessão ao repositório.
 
@@ -42,3 +42,7 @@ Checklist após deploy: entrar, criar/editar um serviço, criar/reagendar/conclu
 ## Dependência
 
 `admin/vendor/supabase.js`: bundle UMD de @supabase/supabase-js 2.118.0 (MIT), hospedado localmente para evitar dependência de CDN em runtime. Licença em `admin/vendor/LICENSE-supabase.txt`.
+
+## Notificações
+
+A implementação de Web Push está em NOTIFICACOES.md. É obrigatório executar o SQL adicional e configurar variáveis seguras da Netlify antes de ativar o aparelho. A nova configuração de build publica somente `dist`, preservando o site público.
